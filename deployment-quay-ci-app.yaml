@@ -4,6 +4,7 @@ metadata:
   name: quay-ci-app
 spec:
   replicas: 1
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       app: quay-ci-app
