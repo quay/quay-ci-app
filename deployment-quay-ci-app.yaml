@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quay-ci-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quay-ci-app
+  template:
+    metadata:
+      labels:
+        app: quay-ci-app
+    spec:
+      containers:
+      - image: quay.io/rh-obulatov/quay-ci-app
+        imagePullPolicy: Always
+        name: quay-ci-app
+        command:
+        - /usr/bin/quay-ci-app
+        - -v=4
+        - --private-key=/etc/quay-ci-app/private-key.pem
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "25m"
+          limits:
+            memory: "128Mi"
+            cpu: "50m"
+        volumeMounts:
+        - name: private-key
+          mountPath: /etc/quay-ci-app
+      volumes:
+      - name: private-key
+        secret:
+          secretName: private-key
