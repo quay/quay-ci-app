@@ -1,0 +1,7 @@
+repositories:
+- owner: quay
+  repo: quay
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master

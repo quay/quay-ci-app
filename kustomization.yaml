@@ -5,6 +5,10 @@ resources:
 - externalsecret-private-key.yaml
 - route-api.yaml
 - service-api.yaml
+configMapGenerator:
+- name: config
+  files:
+  - config.yaml
 images:
 - digest: sha256:d8a55d42ba2849ccb99b34b79143a28aafc787e98809f845332aa024e1080367
   name: quay.io/rh-obulatov/quay-ci-app

@@ -20,7 +20,8 @@ spec:
         command:
         - /usr/bin/quay-ci-app
         - -v=4
-        - --private-key=/etc/quay-ci-app/private-key.pem
+        - --config=/etc/quay-ci-app/config/config.yaml
+        - --private-key=/etc/quay-ci-app/private-key/private-key.pem
         resources:
           requests:
             memory: "64Mi"
@@ -29,9 +30,14 @@ spec:
             memory: "128Mi"
             cpu: "50m"
         volumeMounts:
+        - name: config
+          mountPath: /etc/quay-ci-app/config
         - name: private-key
-          mountPath: /etc/quay-ci-app
+          mountPath: /etc/quay-ci-app/private-key
       volumes:
+      - name: config
+        configMap:
+          name: config
       - name: private-key
         secret:
           secretName: private-key
