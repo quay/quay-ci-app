@@ -5,3 +5,21 @@ repositories:
   - name: redhat-3.7
     syncFrom:
       branch: master
+- owner: quay
+  repo: quay-operator
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master
+- owner: quay
+  repo: config-tool
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master
+- owner: quay
+  repo: quay-bridge-operator
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master
