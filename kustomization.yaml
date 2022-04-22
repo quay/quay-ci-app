@@ -6,9 +6,9 @@ resources:
 - route-api.yaml
 - service-api.yaml
 configMapGenerator:
-- name: config
-  files:
+- files:
   - config.yaml
+  name: config
 images:
-- digest: sha256:d8a55d42ba2849ccb99b34b79143a28aafc787e98809f845332aa024e1080367
+- digest: sha256:f5a64b2046c711024226ab6463ce737e4d4595e29f8e054a018d36d2b233a490
   name: quay.io/rh-obulatov/quay-ci-app
