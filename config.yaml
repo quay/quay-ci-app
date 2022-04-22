@@ -34,7 +34,7 @@ repositories:
   branches:
   - name: redhat-3.7
     syncFrom:
-      branch: master
+      branch: main
 - owner: quay
   repo: container-security-operator
   branches:
