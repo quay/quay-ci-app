@@ -23,3 +23,9 @@ repositories:
   - name: redhat-3.7
     syncFrom:
       branch: master
+- owner: quay
+  repo: quay-builder
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master
