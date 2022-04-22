@@ -29,3 +29,15 @@ repositories:
   - name: redhat-3.7
     syncFrom:
       branch: master
+- owner: quay
+  repo: quay-builder-qemu
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master
+- owner: quay
+  repo: container-security-operator
+  branches:
+  - name: redhat-3.7
+    syncFrom:
+      branch: master
