@@ -131,7 +131,7 @@ func (r reactor) sync(ctx context.Context, dest, src configuration.BranchReferen
 		}
 	}
 
-	r.statusInformer.UpdateBranchStatus(dest.String(), "Synced", fmt.Sprintf("synched from %s, commitish: %s", src, sourceRef.Object.GetSHA()))
+	r.statusInformer.UpdateBranchStatus(dest.String(), "Synced", fmt.Sprintf("synched from %s, commit: %s", src, sourceRef.Object.GetSHA()))
 
 	return nil
 }
