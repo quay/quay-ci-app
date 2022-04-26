@@ -39,5 +39,7 @@ jobs:
             version=$(git describe --always)
             git checkout manifests
             kustomize edit set image "${{ env.REPOSITORY }}@${{ steps.docker_build.outputs.digest }}"
+            git config --global user.email "quay@users.noreply.github.com"
+            git config --global user.name "GitHub Action"
             git commit -a -m "Deploy quay-ci-app $version"
             git push
