@@ -28,3 +28,14 @@ jobs:
         with:
           push: true
           tags: ${{ env.IMAGE }}
+
+      - name: Update kustomization.yaml in manifests
+        uses: stefanprodan/kube-tools@v1
+        with:
+          kustomize: 4.5.4
+          command: |
+            version=$(git describe --always)
+            git checkout manifests
+            kustomize edit set image "${{ env.IMAGE }}:${{ steps.docker_build.outputs.digest }}"
+            git commit -m "Deploy quay-ci-app $version"
+            git push origin manifests
