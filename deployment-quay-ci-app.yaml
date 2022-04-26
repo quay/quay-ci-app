@@ -14,7 +14,7 @@ spec:
         app: quay-ci-app
     spec:
       containers:
-      - image: quay.io/rh-obulatov/quay-ci-app
+      - image: quay.io/projectquay/quay-ci-app
         imagePullPolicy: Always
         name: quay-ci-app
         command:
