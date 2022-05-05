@@ -2,42 +2,42 @@ repositories:
 - owner: quay
   repo: quay
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: master
 - owner: quay
   repo: quay-operator
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: master
 - owner: quay
   repo: config-tool
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: master
 - owner: quay
   repo: quay-bridge-operator
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: master
 - owner: quay
   repo: quay-builder
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: master
 - owner: quay
   repo: quay-builder-qemu
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: main
 - owner: quay
   repo: container-security-operator
   branches:
-  - name: redhat-3.7
+  - name: redhat-3.8
     syncFrom:
       branch: master
