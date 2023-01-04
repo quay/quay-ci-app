@@ -120,7 +120,7 @@ func (r reactor) sync(ctx context.Context, dest, src configuration.BranchReferen
 		return err
 	}
 
-	klog.V(4).Infof("syching %s (%s) from %s (%s)...", src, sourceRef.Object.GetSHA(), dest, destinationRef.Object.GetSHA())
+	klog.V(4).Infof("checking if %s (%s) is synced with %s (%s)...", dest, destinationRef.GetObject().GetSHA(), src, sourceRef.GetObject().GetSHA())
 
 	if destinationRef.Object.GetSHA() != sourceRef.Object.GetSHA() {
 		klog.V(2).Infof("updating %s (%s -> %s)...", dest, destinationRef.Object.GetSHA(), sourceRef.Object.GetSHA())
