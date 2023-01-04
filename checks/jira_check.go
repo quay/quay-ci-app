@@ -45,6 +45,8 @@ func (c *Jira) githubUserLogin() (string, error) {
 }
 
 func (c *Jira) reportTitleResult(ctx context.Context, owner, repo, headSHA string, number int, conclusion string, output *github.CheckRunOutput) error {
+	klog.V(4).Infof("reporting Pull Request Title result on %s/%s#%d: %s: %s", owner, repo, number, conclusion, output.GetTitle())
+
 	checkRun, _, err := c.githubClient.Checks.CreateCheckRun(ctx, owner, repo, github.CreateCheckRunOptions{
 		Name:       "Pull Request Title",
 		HeadSHA:    headSHA,
@@ -85,6 +87,8 @@ func (c *Jira) deleteOldComments(ctx context.Context, owner, repo string, number
 }
 
 func (c *Jira) reportInternalError(ctx context.Context, owner, repo, headSHA string, number int, msg string) error {
+	klog.V(4).Infof("reporting internal error on %s/%s#%d: %s", owner, repo, number, msg)
+
 	_, _, _ = c.githubClient.Checks.CreateCheckRun(ctx, owner, repo, github.CreateCheckRunOptions{
 		Name:    "Pull Request Title",
 		HeadSHA: headSHA,
