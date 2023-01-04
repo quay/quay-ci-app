@@ -349,7 +349,7 @@ func main() {
 				if klog.V(6).Enabled() {
 					klog.Infof("request from %s: %s %s: (content-type: %s, event: %s) %q", r.RemoteAddr, r.Method, r.URL, contentType, event, body)
 				} else {
-					klog.V(4).Infof("request from %s: %s %s: (content-type: %s, event: %s) [%s bytes]", r.RemoteAddr, r.Method, r.URL, contentType, event, len(body))
+					klog.V(4).Infof("request from %s: %s %s: (content-type: %s, event: %s) [%d bytes]", r.RemoteAddr, r.Method, r.URL, contentType, event, len(body))
 				}
 				err := eh.HandleEvent(event, string(body))
 				if err != nil {
