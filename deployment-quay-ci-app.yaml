@@ -22,6 +22,7 @@ spec:
         - -v=4
         - --config=/etc/quay-ci-app/config/config.yaml
         - --private-key=/etc/quay-ci-app/private-key/private-key.pem
+        - --jira-token=/etc/quay-ci-app/private-key/jira-token
         resources:
           requests:
             memory: "64Mi"
