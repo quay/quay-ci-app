@@ -1,6 +1,10 @@
+app_id: 174635
+installation_id: 23518045
 repositories:
 - owner: quay
   repo: quay
+  jira:
+    key: PROJQUAY
   branches:
   - name: redhat-3.9
     syncFrom:
