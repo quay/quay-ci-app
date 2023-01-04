@@ -346,7 +346,11 @@ func main() {
 			if len(body) > 0 {
 				contentType := r.Header.Get("Content-Type")
 				event := r.Header.Get("X-GitHub-Event")
-				klog.V(4).Infof("request from %s: %s %s: (content-type: %s, event: %s) %q", r.RemoteAddr, r.Method, r.URL, contentType, event, body)
+				if klog.V(6).Enabled() {
+					klog.Infof("request from %s: %s %s: (content-type: %s, event: %s) %q", r.RemoteAddr, r.Method, r.URL, contentType, event, body)
+				} else {
+					klog.V(4).Infof("request from %s: %s %s: (content-type: %s, event: %s) [%s bytes]", r.RemoteAddr, r.Method, r.URL, contentType, event, len(body))
+				}
 				err := eh.HandleEvent(event, string(body))
 				if err != nil {
 					klog.Errorf("failed to handle event %s: %v", event, err)
