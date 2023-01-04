@@ -5,6 +5,16 @@ repositories:
   repo: quay
   jira:
     key: PROJQUAY
+    transitions:
+    - from:
+      - New
+      - Planning
+      - To Do
+      to: In Progress
+      when:
+        event:
+        - opened
+        - recheck
   branches:
   - name: redhat-3.9
     syncFrom:
