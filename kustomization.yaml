@@ -10,5 +10,5 @@ configMapGenerator:
   - config.yaml
   name: config
 images:
-- digest: sha256:40beb3c25b7b6de8027c748835ab3b6a40220ab7392f69739b26f4678acfce21
+- digest: sha256:c47e817e5c3256918fe41e5aba76e237b04aa3ba40e5db94365cb5f434ec186f
   name: quay.io/projectquay/quay-ci-app
