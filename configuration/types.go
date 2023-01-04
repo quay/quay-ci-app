@@ -1,15 +1,19 @@
 package configuration
 
 import (
-	"io/ioutil"
+	"os"
 
 	"sigs.k8s.io/yaml"
 )
 
+type Jira struct {
+	Key string `json:"key"`
+}
+
 type BranchReference struct {
-	Owner  string `yaml:"owner"`
-	Repo   string `yaml:"repo"`
-	Branch string `yaml:"branch"`
+	Owner  string `json:"owner"`
+	Repo   string `json:"repo"`
+	Branch string `json:"branch"`
 }
 
 func (br BranchReference) String() string {
@@ -24,11 +28,23 @@ type Branch struct {
 type Repository struct {
 	Owner    string   `json:"owner"`
 	Repo     string   `json:"repo"`
+	Jira     Jira     `json:"jira"`
 	Branches []Branch `json:"branches"`
 }
 
 type Configuration struct {
-	Repositories []Repository `json:"repositories"`
+	AppID          int64        `json:"app_id"`
+	InstallationID int64        `json:"installation_id"`
+	Repositories   []Repository `json:"repositories"`
+}
+
+func (c *Configuration) Jira(owner, repoName string) Jira {
+	for _, repo := range c.Repositories {
+		if repo.Owner == owner && repo.Repo == repoName {
+			return repo.Jira
+		}
+	}
+	return Jira{}
 }
 
 func (c *Configuration) BranchesSyncedFrom(owner, repoName, branchName string) []BranchReference {
@@ -58,7 +74,7 @@ func (c *Configuration) BranchesSyncedFrom(owner, repoName, branchName string) [
 }
 
 func LoadFromFile(filename string) (*Configuration, error) {
-	buf, err := ioutil.ReadFile(filename)
+	buf, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
 	}
