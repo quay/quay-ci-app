@@ -13,9 +13,33 @@ import (
 	"k8s.io/klog/v2"
 )
 
+type Event string
+
+const (
+	EventEdited  Event = "edited"
+	EventOpened  Event = "opened"
+	EventRecheck Event = "recheck"
+)
+
 var titleJiraRegex = regexp.MustCompile(` \(([A-Z]+-[0-9]+)\)$`)
 
 const internalErrorMarker = "<!-- quay-ci-app: jira internal error -->"
+
+func contains(list []string, str string) bool {
+	for _, v := range list {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+func matchCondition(event Event, issue *jira.Issue, cond configuration.JiraTransitionCondition) bool {
+	if len(cond.Event) != 0 && !contains(cond.Event, string(event)) {
+		return false
+	}
+	return true
+}
 
 type Jira struct {
 	githubClient    *github.Client
@@ -108,7 +132,27 @@ func (c *Jira) reportInternalError(ctx context.Context, owner, repo, headSHA str
 	return err
 }
 
-func (c *Jira) Run(jiraConfig configuration.Jira, pr *github.PullRequest) error {
+func (c *Jira) transitionTo(ctx context.Context, issue *jira.Issue, desiredStatus string) error {
+	klog.V(4).Infof("transitioning issue %s from %s to %s...", issue.Key, issue.Fields.Status.Name, desiredStatus)
+
+	transitions, _, err := c.jiraClient.Issue.GetTransitions(issue.Key)
+	if err != nil {
+		return fmt.Errorf("failed to get transitions for issue %s: %w", issue.Key, err)
+	}
+	for _, transition := range transitions {
+		if transition.To.Name == desiredStatus {
+			_, err = c.jiraClient.Issue.DoTransitionWithContext(ctx, issue.Key, transition.ID)
+			if err != nil {
+				return fmt.Errorf("failed to transition issue %s with transition %s: %w", issue.Key, transition.Name, err)
+			}
+			break
+		}
+	}
+
+	return nil
+}
+
+func (c *Jira) Run(event Event, jiraConfig configuration.Jira, pr *github.PullRequest) error {
 	if jiraConfig.Key == "" {
 		return nil
 	}
@@ -138,7 +182,7 @@ func (c *Jira) Run(jiraConfig configuration.Jira, pr *github.PullRequest) error 
 		})
 	}
 
-	_, resp, err := c.jiraClient.Issue.Get(key, nil)
+	issue, resp, err := c.jiraClient.Issue.Get(key, nil)
 	if err != nil {
 		klog.V(2).Infof("checking pull request %s/%s#%d: failed to get Jira issue %s: %v", owner, repo, pr.GetNumber(), key, err)
 
@@ -155,8 +199,23 @@ func (c *Jira) Run(jiraConfig configuration.Jira, pr *github.PullRequest) error 
 		})
 	}
 
-	return c.reportTitleResult(ctx, owner, repo, headSHA, pr.GetNumber(), "success", &github.CheckRunOutput{
+	err = c.reportTitleResult(ctx, owner, repo, headSHA, pr.GetNumber(), "success", &github.CheckRunOutput{
 		Title:   github.String("Pull request title has a valid Jira issue"),
 		Summary: github.String("The pull request title is valid and has a Jira issue.\n"),
 	})
+	if err != nil {
+		return err
+	}
+
+	for _, tr := range jiraConfig.Transitions {
+		if contains(tr.From, issue.Fields.Status.Name) && matchCondition(event, issue, tr.When) {
+			err = c.transitionTo(ctx, issue, tr.To)
+			if err != nil {
+				klog.V(2).Infof("checking pull request %s/%s#%d: failed to transition Jira issue %s to %s: %v", owner, repo, pr.GetNumber(), key, tr.To, err)
+			}
+			break
+		}
+	}
+
+	return nil
 }

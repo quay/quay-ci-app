@@ -170,7 +170,7 @@ func (r reactor) HandleCheckSuiteRerequest(ctx context.Context, org, repo string
 			return fmt.Errorf("failed to get pull request: %w", err)
 		}
 
-		if err := r.jiraCheck.Run(r.cfg.Jira(org, repo), pr); err != nil {
+		if err := r.jiraCheck.Run(checks.EventRecheck, r.cfg.Jira(org, repo), pr); err != nil {
 			return fmt.Errorf("failed to run jira check: %w", err)
 		}
 	}
@@ -193,7 +193,7 @@ func (r reactor) HandleIssueCommentCreate(ctx context.Context, org, repo string,
 			return fmt.Errorf("failed to get pull request: %w", err)
 		}
 
-		err = r.jiraCheck.Run(r.cfg.Jira(org, repo), pr)
+		err = r.jiraCheck.Run(checks.EventRecheck, r.cfg.Jira(org, repo), pr)
 		if err != nil {
 			return fmt.Errorf("failed to run jira check: %w", err)
 		}
@@ -203,11 +203,11 @@ func (r reactor) HandleIssueCommentCreate(ctx context.Context, org, repo string,
 }
 
 func (r reactor) HandlePullRequestCreate(ctx context.Context, org, repo string, pr *github.PullRequest) error {
-	return r.jiraCheck.Run(r.cfg.Jira(org, repo), pr)
+	return r.jiraCheck.Run(checks.EventOpened, r.cfg.Jira(org, repo), pr)
 }
 
 func (r reactor) HandlePullRequestEdit(ctx context.Context, org, repo string, pr *github.PullRequest) error {
-	return r.jiraCheck.Run(r.cfg.Jira(org, repo), pr)
+	return r.jiraCheck.Run(checks.EventEdited, r.cfg.Jira(org, repo), pr)
 }
 
 type EventHandler struct {

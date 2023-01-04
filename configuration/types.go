@@ -6,8 +6,19 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+type JiraTransitionCondition struct {
+	Event []string `json:"event"`
+}
+
+type JiraTransition struct {
+	From []string                `json:"from"`
+	To   string                  `json:"to"`
+	When JiraTransitionCondition `json:"when"`
+}
+
 type Jira struct {
-	Key string `json:"key"`
+	Key         string           `json:"key"`
+	Transitions []JiraTransition `json:"transitions"`
 }
 
 type BranchReference struct {
