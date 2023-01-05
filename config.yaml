@@ -5,6 +5,7 @@ repositories:
   repo: quay
   jira:
     key: PROJQUAY
+    fixVersionPrefix: quay-v
     transitions:
     - from:
       - New
@@ -16,9 +17,17 @@ repositories:
         - opened
         - recheck
   branches:
+  - name: master
+    version: "3.9"
   - name: redhat-3.9
     syncFrom:
       branch: master
+  - name: redhat-3.8
+    version: "3.8"
+  - name: redhat-3.7
+    version: "3.7"
+  - name: redhat-3.6
+    version: "3.6"
 - owner: quay
   repo: quay-ui
   branches:
