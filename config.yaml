@@ -89,9 +89,6 @@ repositories:
 - owner: quay
   repo: mirror-registry
   branches:
-  - name: mirror-registry-1.2-rhel-8
-    syncFrom:
-      branch: main
   - name: mirror-registry-1.3-rhel-8
     syncFrom:
       branch: main
