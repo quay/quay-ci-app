@@ -33,6 +33,11 @@ func (r *dummyReactor) HandleIssueCommentCreate(ctx context.Context, org, repo s
 	return nil
 }
 
+func (r *dummyReactor) HandlePullRequestClose(ctx context.Context, org, repo string, pr *github.PullRequest) error {
+	r.events = append(r.events, fmt.Sprintf("pull_request_close:%s/%s:%d:[%s]", org, repo, pr.GetNumber(), pr.GetTitle()))
+	return nil
+}
+
 func (r *dummyReactor) HandlePullRequestCreate(ctx context.Context, org, repo string, pr *github.PullRequest) error {
 	r.events = append(r.events, fmt.Sprintf("pull_request_create:%s/%s:%d:[%s]", org, repo, pr.GetNumber(), pr.GetTitle()))
 	return nil
@@ -87,6 +92,22 @@ func TestPullRequestCommentRecheck(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if !reflect.DeepEqual(r.events, []string{"issue_comment_create:quay/quay:1:[chore: Test PR (PROJQUAY-1234)]:[/retest]"}) {
+		t.Errorf("unexpected events: %v", r.events)
+	}
+}
+
+func TestPullRequestMerged(t *testing.T) {
+	const prEvent = `{"action":"closed","pull_request":{"number":1,"title":"chore: Test PR (PROJQUAY-1234)","state":"closed"},"repository":{"name":"quay","full_name":"quay/quay","private":false,"owner":{"name":"quay","login":"quay"}}}`
+
+	r := &dummyReactor{}
+	eh := &EventHandler{
+		reactor: r,
+	}
+	err := eh.HandleEvent("pull_request", prEvent)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+	if !reflect.DeepEqual(r.events, []string{"pull_request_close:quay/quay:1:[chore: Test PR (PROJQUAY-1234)]"}) {
 		t.Errorf("unexpected events: %v", r.events)
 	}
 }

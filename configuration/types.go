@@ -7,13 +7,16 @@ import (
 )
 
 type JiraTransitionCondition struct {
-	Event []string `json:"event"`
+	Merged *bool    `json:"merged"`
+	Event  []string `json:"event"`
 }
 
 type JiraTransition struct {
-	From []string                `json:"from"`
-	To   string                  `json:"to"`
-	When JiraTransitionCondition `json:"when"`
+	From          []string                `json:"from"`
+	To            string                  `json:"to"`
+	SetFixVersion bool                    `json:"setFixVersion"`
+	When          JiraTransitionCondition `json:"when"`
+	Comment       string                  `json:"comment"`
 }
 
 type Jira struct {
@@ -58,6 +61,21 @@ func (c *Configuration) Jira(owner, repoName string) Jira {
 		}
 	}
 	return Jira{}
+}
+
+func (c *Configuration) Branch(owner, repoName, branchName string) Branch {
+	for _, repo := range c.Repositories {
+		if repo.Owner == owner && repo.Repo == repoName {
+			for _, branch := range repo.Branches {
+				if branch.Name == branchName {
+					return branch
+				}
+			}
+		}
+	}
+	return Branch{
+		Name: branchName,
+	}
 }
 
 func (c *Configuration) BranchesSyncedFrom(owner, repoName, branchName string) []BranchReference {

@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +18,7 @@ import (
 	"github.com/google/go-github/v42/github"
 	"github.com/quay/quay-ci-app/checks"
 	"github.com/quay/quay-ci-app/configuration"
+	"github.com/quay/quay-ci-app/taginformer"
 	"golang.org/x/oauth2"
 	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog/v2"
@@ -33,10 +32,7 @@ var (
 	privateKey    = flag.String("private-key", "./private-key.pem", "private key file for the GitHub application")
 )
 
-var (
-	refVersionRegex = regexp.MustCompile(`^refs/tags/v(\d+\.\d+)\.(\d+)$`)
-	recheckRegex    = regexp.MustCompile(`(?mi)^/recheck\s*$`)
-)
+var recheckRegex = regexp.MustCompile(`(?mi)^/recheck\s*$`)
 
 type BranchSyncStatus struct {
 	Status             string    `json:"status"`
@@ -88,7 +84,7 @@ func (si *StatusInformer) statusSnapshot() Status {
 	return si.status.DeepCopy()
 }
 
-func (si *StatusInformer) GetStatus(cfg *configuration.Configuration, ti *TagInformer) Status {
+func (si *StatusInformer) GetStatus(cfg *configuration.Configuration, ti *taginformer.TagInformer) Status {
 	status := si.statusSnapshot()
 	for _, repo := range cfg.Repositories {
 		for _, branch := range repo.Branches {
@@ -142,113 +138,11 @@ func (si *StatusInformer) UpdateBranchSyncStatus(branch, status, message string)
 	})
 }
 
-type YStream struct {
-	// patchVersions are sorted and unique.
-	patchVersions []int
-}
-
-func (y *YStream) Add(z int) {
-	i := sort.SearchInts(y.patchVersions, z)
-	if i < len(y.patchVersions) && y.patchVersions[i] == z {
-		// z is already in the list, do nothing
-		return
-	}
-
-	y.patchVersions = append(y.patchVersions, 0)
-	copy(y.patchVersions[i+1:], y.patchVersions[i:])
-	y.patchVersions[i] = z
-}
-
-func (y *YStream) Next() int {
-	if y == nil || len(y.patchVersions) == 0 {
-		return 0
-	}
-	return y.patchVersions[len(y.patchVersions)-1] + 1
-}
-
-type TagInformer struct {
-	mutex  sync.Mutex
-	client *github.Client
-	synced map[string]bool
-	tags   map[string]*YStream
-}
-
-func (ti *TagInformer) key(org, repo, xy string) string {
-	return fmt.Sprintf("%s/%s:%s", org, repo, xy)
-}
-
-func (ti *TagInformer) hasSynced(org, repo string) bool {
-	ti.mutex.Lock()
-	defer ti.mutex.Unlock()
-	return ti.synced[fmt.Sprintf("%s/%s", org, repo)]
-}
-
-func (ti *TagInformer) addRefs(org, repo string, tags []*github.Reference) {
-	ti.mutex.Lock()
-	defer ti.mutex.Unlock()
-
-	if ti.tags == nil {
-		ti.tags = map[string]*YStream{}
-	}
-
-	for _, tag := range tags {
-		match := refVersionRegex.FindStringSubmatch(tag.GetRef())
-		if match != nil {
-			xy := match[1]
-			z := match[2]
-			zInt, err := strconv.Atoi(z)
-			if err != nil {
-				// should never happen
-				continue
-			}
-			key := ti.key(org, repo, xy)
-			if ti.tags[key] == nil {
-				ti.tags[key] = &YStream{}
-			}
-			ti.tags[key].Add(zInt)
-		}
-	}
-
-	if ti.synced == nil {
-		ti.synced = map[string]bool{}
-	}
-	ti.synced[fmt.Sprintf("%s/%s", org, repo)] = true
-}
-
-func (ti *TagInformer) init(org, repo string) error {
-	klog.V(4).Infof("initializing tag informer for %s/%s", org, repo)
-
-	tags, _, err := ti.client.Git.ListMatchingRefs(context.Background(), org, repo, &github.ReferenceListOptions{
-		Ref: "tags/v",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to list tags: %w", err)
-	}
-
-	ti.addRefs(org, repo, tags)
-
-	return nil
-}
-
-func (ti *TagInformer) NextVersion(org, repo, xy string) (string, error) {
-	if !ti.hasSynced(org, repo) {
-		if err := ti.init(org, repo); err != nil {
-			return "", err
-		}
-	}
-
-	ti.mutex.Lock()
-	defer ti.mutex.Unlock()
-
-	key := ti.key(org, repo, xy)
-	z := ti.tags[key].Next()
-	return fmt.Sprintf("%s.%d", xy, z), nil
-}
-
 type Reactor interface {
 	HandleBranchPush(ctx context.Context, org, repo string, branch string) error
 	HandleCheckSuiteRerequest(ctx context.Context, org, repo string, checkSuite *github.CheckSuite) error
 	HandleIssueCommentCreate(ctx context.Context, org, repo string, issue *github.Issue, comment *github.IssueComment) error
+	HandlePullRequestClose(ctx context.Context, org, repo string, pr *github.PullRequest) error
 	HandlePullRequestCreate(ctx context.Context, org, repo string, pr *github.PullRequest) error
 	HandlePullRequestEdit(ctx context.Context, org, repo string, pr *github.PullRequest) error
 }
@@ -325,7 +219,7 @@ func (r reactor) HandleCheckSuiteRerequest(ctx context.Context, org, repo string
 			return fmt.Errorf("failed to get pull request: %w", err)
 		}
 
-		if err := r.jiraCheck.Run(checks.EventRecheck, r.cfg.Jira(org, repo), pr); err != nil {
+		if err := r.jiraCheck.Run(checks.EventRecheck, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr); err != nil {
 			return fmt.Errorf("failed to run jira check: %w", err)
 		}
 	}
@@ -348,7 +242,7 @@ func (r reactor) HandleIssueCommentCreate(ctx context.Context, org, repo string,
 			return fmt.Errorf("failed to get pull request: %w", err)
 		}
 
-		err = r.jiraCheck.Run(checks.EventRecheck, r.cfg.Jira(org, repo), pr)
+		err = r.jiraCheck.Run(checks.EventRecheck, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr)
 		if err != nil {
 			return fmt.Errorf("failed to run jira check: %w", err)
 		}
@@ -357,12 +251,16 @@ func (r reactor) HandleIssueCommentCreate(ctx context.Context, org, repo string,
 	return nil
 }
 
+func (r reactor) HandlePullRequestClose(ctx context.Context, org, repo string, pr *github.PullRequest) error {
+	return r.jiraCheck.Run(checks.EventClosed, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr)
+}
+
 func (r reactor) HandlePullRequestCreate(ctx context.Context, org, repo string, pr *github.PullRequest) error {
-	return r.jiraCheck.Run(checks.EventOpened, r.cfg.Jira(org, repo), pr)
+	return r.jiraCheck.Run(checks.EventOpened, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr)
 }
 
 func (r reactor) HandlePullRequestEdit(ctx context.Context, org, repo string, pr *github.PullRequest) error {
-	return r.jiraCheck.Run(checks.EventEdited, r.cfg.Jira(org, repo), pr)
+	return r.jiraCheck.Run(checks.EventEdited, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr)
 }
 
 type EventHandler struct {
@@ -404,6 +302,8 @@ func (eh *EventHandler) HandleEvent(eventType string, body string) error {
 			return eh.reactor.HandlePullRequestCreate(context.Background(), prEvent.Repo.Owner.GetLogin(), prEvent.Repo.GetName(), prEvent.PullRequest)
 		case "edited":
 			return eh.reactor.HandlePullRequestEdit(context.Background(), prEvent.Repo.Owner.GetLogin(), prEvent.Repo.GetName(), prEvent.PullRequest)
+		case "closed":
+			return eh.reactor.HandlePullRequestClose(context.Background(), prEvent.Repo.Owner.GetLogin(), prEvent.Repo.GetName(), prEvent.PullRequest)
 		}
 	case "push":
 		var pushEvent github.PushEvent
@@ -473,14 +373,12 @@ func main() {
 
 	client := github.NewClient(&http.Client{Transport: itr})
 	appClient := github.NewClient(&http.Client{Transport: apptr})
-	tagInformer := &TagInformer{
-		client: client,
-	}
+	tagInformer := taginformer.New(client)
 	statusInformer := &StatusInformer{}
 	r := &reactor{
 		client:         client,
 		cfg:            cfg,
-		jiraCheck:      checks.NewJira(client, appClient, jiraClient),
+		jiraCheck:      checks.NewJira(client, appClient, jiraClient, tagInformer),
 		statusInformer: statusInformer,
 	}
 	eh := &EventHandler{reactor: r}

@@ -1,8 +1,10 @@
 package checks
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 	"regexp"
 	"strings"
 	"time"
@@ -10,12 +12,14 @@ import (
 	"github.com/andygrunwald/go-jira"
 	"github.com/google/go-github/v42/github"
 	"github.com/quay/quay-ci-app/configuration"
+	"github.com/quay/quay-ci-app/taginformer"
 	"k8s.io/klog/v2"
 )
 
 type Event string
 
 const (
+	EventClosed  Event = "closed"
 	EventEdited  Event = "edited"
 	EventOpened  Event = "opened"
 	EventRecheck Event = "recheck"
@@ -34,7 +38,13 @@ func contains(list []string, str string) bool {
 	return false
 }
 
-func matchCondition(event Event, issue *jira.Issue, cond configuration.JiraTransitionCondition) bool {
+func matchCondition(event Event, issue *jira.Issue, pr *github.PullRequest, cond configuration.JiraTransitionCondition) bool {
+	if cond.Merged != nil {
+		merged := !pr.GetMergedAt().IsZero()
+		if merged != *cond.Merged {
+			return false
+		}
+	}
 	if len(cond.Event) != 0 && !contains(cond.Event, string(event)) {
 		return false
 	}
@@ -45,15 +55,17 @@ type Jira struct {
 	githubClient    *github.Client
 	appGithubClient *github.Client
 	jiraClient      *jira.Client
+	tagInformer     *taginformer.TagInformer
 
 	cachedGithubUserLogin string
 }
 
-func NewJira(githubClient *github.Client, appGithubClient *github.Client, jiraClient *jira.Client) *Jira {
+func NewJira(githubClient *github.Client, appGithubClient *github.Client, jiraClient *jira.Client, tagInformer *taginformer.TagInformer) *Jira {
 	return &Jira{
 		githubClient:    githubClient,
 		appGithubClient: appGithubClient,
 		jiraClient:      jiraClient,
+		tagInformer:     tagInformer,
 	}
 }
 
@@ -152,7 +164,76 @@ func (c *Jira) transitionTo(ctx context.Context, issue *jira.Issue, desiredStatu
 	return nil
 }
 
-func (c *Jira) Run(event Event, jiraConfig configuration.Jira, pr *github.PullRequest) error {
+func (c *Jira) setFixVersion(ctx context.Context, issue *jira.Issue, fixVersion string) error {
+	for _, version := range issue.Fields.FixVersions {
+		if version.Name == fixVersion {
+			return nil
+		}
+	}
+
+	_, err := c.jiraClient.Issue.UpdateIssueWithContext(ctx, issue.Key, map[string]interface{}{
+		"update": map[string]interface{}{
+			"fixVersions": []map[string]interface{}{
+				{
+					"add": map[string]interface{}{
+						"name": fixVersion,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set fix version %s for issue %s: %w", fixVersion, issue.Key, err)
+	}
+
+	return nil
+}
+
+func (c *Jira) applyTransition(ctx context.Context, jiraConfig configuration.Jira, branchConfig configuration.Branch, issue *jira.Issue, tr configuration.JiraTransition, pr *github.PullRequest) error {
+	if tr.SetFixVersion && branchConfig.Version != "" {
+		org := pr.GetBase().GetRepo().GetOwner().GetLogin()
+		repo := pr.GetBase().GetRepo().GetName()
+		fixVersion, err := c.tagInformer.NextVersion(org, repo, branchConfig.Version)
+		if err != nil {
+			return fmt.Errorf("failed to get next version for %s/%s:%s: %w", org, repo, branchConfig.Name, err)
+		}
+		err = c.setFixVersion(ctx, issue, jiraConfig.FixVersionPrefix+fixVersion)
+		if err != nil {
+			return err
+		}
+	}
+
+	if tr.Comment != "" {
+		commentTemplate, err := template.New("comment").Parse(tr.Comment)
+		if err != nil {
+			return fmt.Errorf("failed to parse comment template: %w", err)
+		}
+		var commentBuffer bytes.Buffer
+		err = commentTemplate.Execute(&commentBuffer, struct {
+			PullRequest *github.PullRequest
+		}{
+			PullRequest: pr,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to execute comment template: %w", err)
+		}
+		_, _, err = c.jiraClient.Issue.AddComment(issue.Key, &jira.Comment{
+			Body: commentBuffer.String(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add comment to issue %s: %w", issue.Key, err)
+		}
+	}
+
+	err := c.transitionTo(ctx, issue, tr.To)
+	if err != nil {
+		return fmt.Errorf("failed to transition Jira issue %s to %s: %v", issue.Key, tr.To, err)
+	}
+
+	return nil
+}
+
+func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig configuration.Branch, pr *github.PullRequest) error {
 	if jiraConfig.Key == "" {
 		return nil
 	}
@@ -208,10 +289,10 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, pr *github.PullRe
 	}
 
 	for _, tr := range jiraConfig.Transitions {
-		if contains(tr.From, issue.Fields.Status.Name) && matchCondition(event, issue, tr.When) {
-			err = c.transitionTo(ctx, issue, tr.To)
+		if contains(tr.From, issue.Fields.Status.Name) && matchCondition(event, issue, pr, tr.When) {
+			err = c.applyTransition(ctx, jiraConfig, branchConfig, issue, tr, pr)
 			if err != nil {
-				klog.V(2).Infof("checking pull request %s/%s#%d: failed to transition Jira issue %s to %s: %v", owner, repo, pr.GetNumber(), key, tr.To, err)
+				klog.V(2).Infof("checking pull request %s/%s#%d: %v", owner, repo, pr.GetNumber(), err)
 			}
 			break
 		}
