@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,14 +33,22 @@ var (
 	privateKey    = flag.String("private-key", "./private-key.pem", "private key file for the GitHub application")
 )
 
-var recheckRegex = regexp.MustCompile(`(?mi)^/recheck\s*$`)
+var (
+	refVersionRegex = regexp.MustCompile(`^refs/tags/v(\d+\.\d+)\.(\d+)$`)
+	recheckRegex    = regexp.MustCompile(`(?mi)^/recheck\s*$`)
+)
 
-type BranchStatus struct {
-	Branch             string    `json:"branch"`
+type BranchSyncStatus struct {
 	Status             string    `json:"status"`
 	Message            string    `json:"message"`
 	LastHeartbeatTime  time.Time `json:"lastHeartbeatTime"`
 	LastTransitionTime time.Time `json:"lastTransitionTime"`
+}
+
+type BranchStatus struct {
+	Branch     string            `json:"branch"`
+	FixVersion string            `json:"fixVersion,omitempty"`
+	SyncStatus *BranchSyncStatus `json:"syncStatus,omitempty"`
 }
 
 type Status struct {
@@ -53,41 +63,186 @@ func (s Status) DeepCopy() Status {
 	}
 }
 
+func (s *Status) SetFixVersion(branch, fixVersion string) {
+	for i := range s.Branches {
+		branchStatus := &s.Branches[i]
+		if branchStatus.Branch == branch {
+			branchStatus.FixVersion = fixVersion
+			return
+		}
+	}
+	s.Branches = append(s.Branches, BranchStatus{
+		Branch:     branch,
+		FixVersion: fixVersion,
+	})
+}
+
 type StatusInformer struct {
 	mutex  sync.Mutex
 	status Status
 }
 
-func (si *StatusInformer) GetStatus() Status {
+func (si *StatusInformer) statusSnapshot() Status {
 	si.mutex.Lock()
 	defer si.mutex.Unlock()
 	return si.status.DeepCopy()
 }
 
-func (si *StatusInformer) UpdateBranchStatus(branch, status, message string) {
+func (si *StatusInformer) GetStatus(cfg *configuration.Configuration, ti *TagInformer) Status {
+	status := si.statusSnapshot()
+	for _, repo := range cfg.Repositories {
+		for _, branch := range repo.Branches {
+			if branch.Version == "" {
+				continue
+			}
+			fixVersion, err := ti.NextVersion(repo.Owner, repo.Repo, branch.Version)
+			if err != nil {
+				klog.Errorf("failed to get next version for %s/%s:%s: %v", repo.Owner, repo.Repo, branch.Version, err)
+				continue
+			}
+			status.SetFixVersion(
+				fmt.Sprintf("%s/%s:%s", repo.Owner, repo.Repo, branch.Name),
+				repo.Jira.FixVersionPrefix+fixVersion,
+			)
+		}
+	}
+	return status
+}
+
+func (si *StatusInformer) UpdateBranchSyncStatus(branch, status, message string) {
 	si.mutex.Lock()
 	defer si.mutex.Unlock()
 
 	now := time.Now().UTC()
 
-	for i, branchStatus := range si.status.Branches {
+	for i := range si.status.Branches {
+		branchStatus := &si.status.Branches[i]
 		if branchStatus.Branch == branch {
-			if branchStatus.Status != status || branchStatus.Message != message {
-				si.status.Branches[i].Status = status
-				si.status.Branches[i].Message = message
-				si.status.Branches[i].LastTransitionTime = now
+			if branchStatus.SyncStatus == nil {
+				branchStatus.SyncStatus = &BranchSyncStatus{}
 			}
-			si.status.Branches[i].LastHeartbeatTime = now
+			syncStatus := branchStatus.SyncStatus
+			if syncStatus.Status != status || syncStatus.Message != message {
+				syncStatus.Status = status
+				syncStatus.Message = message
+				syncStatus.LastTransitionTime = now
+			}
+			syncStatus.LastHeartbeatTime = now
 			return
 		}
 	}
 	si.status.Branches = append(si.status.Branches, BranchStatus{
-		Branch:             branch,
-		Status:             status,
-		Message:            message,
-		LastHeartbeatTime:  now,
-		LastTransitionTime: now,
+		Branch: branch,
+		SyncStatus: &BranchSyncStatus{
+			Status:             status,
+			Message:            message,
+			LastHeartbeatTime:  now,
+			LastTransitionTime: now,
+		},
 	})
+}
+
+type YStream struct {
+	// patchVersions are sorted and unique.
+	patchVersions []int
+}
+
+func (y *YStream) Add(z int) {
+	i := sort.SearchInts(y.patchVersions, z)
+	if i < len(y.patchVersions) && y.patchVersions[i] == z {
+		// z is already in the list, do nothing
+		return
+	}
+
+	y.patchVersions = append(y.patchVersions, 0)
+	copy(y.patchVersions[i+1:], y.patchVersions[i:])
+	y.patchVersions[i] = z
+}
+
+func (y *YStream) Next() int {
+	if y == nil || len(y.patchVersions) == 0 {
+		return 0
+	}
+	return y.patchVersions[len(y.patchVersions)-1] + 1
+}
+
+type TagInformer struct {
+	mutex  sync.Mutex
+	client *github.Client
+	synced map[string]bool
+	tags   map[string]*YStream
+}
+
+func (ti *TagInformer) key(org, repo, xy string) string {
+	return fmt.Sprintf("%s/%s:%s", org, repo, xy)
+}
+
+func (ti *TagInformer) hasSynced(org, repo string) bool {
+	ti.mutex.Lock()
+	defer ti.mutex.Unlock()
+	return ti.synced[fmt.Sprintf("%s/%s", org, repo)]
+}
+
+func (ti *TagInformer) addRefs(org, repo string, tags []*github.Reference) {
+	ti.mutex.Lock()
+	defer ti.mutex.Unlock()
+
+	if ti.tags == nil {
+		ti.tags = map[string]*YStream{}
+	}
+
+	for _, tag := range tags {
+		match := refVersionRegex.FindStringSubmatch(tag.GetRef())
+		if match != nil {
+			xy := match[1]
+			z := match[2]
+			zInt, err := strconv.Atoi(z)
+			if err != nil {
+				// should never happen
+				continue
+			}
+			key := ti.key(org, repo, xy)
+			if ti.tags[key] == nil {
+				ti.tags[key] = &YStream{}
+			}
+			ti.tags[key].Add(zInt)
+		}
+	}
+
+	if ti.synced == nil {
+		ti.synced = map[string]bool{}
+	}
+	ti.synced[fmt.Sprintf("%s/%s", org, repo)] = true
+}
+
+func (ti *TagInformer) init(org, repo string) error {
+	klog.V(4).Infof("initializing tag informer for %s/%s", org, repo)
+
+	tags, _, err := ti.client.Git.ListMatchingRefs(context.Background(), org, repo, &github.ReferenceListOptions{
+		Ref: "tags/v",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list tags: %w", err)
+	}
+
+	ti.addRefs(org, repo, tags)
+
+	return nil
+}
+
+func (ti *TagInformer) NextVersion(org, repo, xy string) (string, error) {
+	if !ti.hasSynced(org, repo) {
+		if err := ti.init(org, repo); err != nil {
+			return "", err
+		}
+	}
+
+	ti.mutex.Lock()
+	defer ti.mutex.Unlock()
+
+	key := ti.key(org, repo, xy)
+	z := ti.tags[key].Next()
+	return fmt.Sprintf("%s.%d", xy, z), nil
 }
 
 type Reactor interface {
@@ -109,14 +264,14 @@ func (r reactor) sync(ctx context.Context, dest, src configuration.BranchReferen
 	sourceRef, _, err := r.client.Git.GetRef(ctx, src.Owner, src.Repo, "heads/"+src.Branch)
 	if err != nil {
 		err = fmt.Errorf("failed to get source ref: %w", err)
-		r.statusInformer.UpdateBranchStatus(dest.String(), "SyncError", err.Error())
+		r.statusInformer.UpdateBranchSyncStatus(dest.String(), "Error", err.Error())
 		return err
 	}
 
 	destinationRef, _, err := r.client.Git.GetRef(ctx, dest.Owner, dest.Repo, "heads/"+dest.Branch)
 	if err != nil {
 		err = fmt.Errorf("failed to get destination ref: %w", err)
-		r.statusInformer.UpdateBranchStatus(dest.String(), "SyncError", err.Error())
+		r.statusInformer.UpdateBranchSyncStatus(dest.String(), "Error", err.Error())
 		return err
 	}
 
@@ -132,12 +287,12 @@ func (r reactor) sync(ctx context.Context, dest, src configuration.BranchReferen
 		}, false)
 		if err != nil {
 			err = fmt.Errorf("failed to update %s: %w", dest, err)
-			r.statusInformer.UpdateBranchStatus(dest.String(), "SyncError", err.Error())
+			r.statusInformer.UpdateBranchSyncStatus(dest.String(), "Error", err.Error())
 			return err
 		}
 	}
 
-	r.statusInformer.UpdateBranchStatus(dest.String(), "Synced", fmt.Sprintf("synched from %s, commit: %s", src, sourceRef.Object.GetSHA()))
+	r.statusInformer.UpdateBranchSyncStatus(dest.String(), "Synced", fmt.Sprintf("synched from %s, commit: %s", src, sourceRef.Object.GetSHA()))
 
 	return nil
 }
@@ -318,6 +473,9 @@ func main() {
 
 	client := github.NewClient(&http.Client{Transport: itr})
 	appClient := github.NewClient(&http.Client{Transport: apptr})
+	tagInformer := &TagInformer{
+		client: client,
+	}
 	statusInformer := &StatusInformer{}
 	r := &reactor{
 		client:         client,
@@ -330,7 +488,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet && r.URL.Path == "/status" {
-				status := statusInformer.GetStatus()
+				status := statusInformer.GetStatus(cfg, tagInformer)
 				w.Header().Set("Content-Type", "application/json")
 				err := json.NewEncoder(w).Encode(status)
 				if err != nil {

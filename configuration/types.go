@@ -17,8 +17,9 @@ type JiraTransition struct {
 }
 
 type Jira struct {
-	Key         string           `json:"key"`
-	Transitions []JiraTransition `json:"transitions"`
+	Key              string           `json:"key"`
+	FixVersionPrefix string           `json:"fixVersionPrefix"`
+	Transitions      []JiraTransition `json:"transitions"`
 }
 
 type BranchReference struct {
@@ -33,6 +34,7 @@ func (br BranchReference) String() string {
 
 type Branch struct {
 	Name     string          `json:"name"`
+	Version  string          `json:"version"`
 	SyncFrom BranchReference `json:"syncFrom"`
 }
 
