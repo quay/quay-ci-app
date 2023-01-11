@@ -38,7 +38,7 @@ func contains(list []string, str string) bool {
 	return false
 }
 
-func matchCondition(event Event, issue *jira.Issue, pr *github.PullRequest, cond configuration.JiraCondition) bool {
+func matchCondition(event Event, issue *jira.Issue, pr *github.PullRequest, fixVersion string, cond configuration.JiraCondition) bool {
 	if len(cond.Status) > 0 {
 		if !contains(cond.Status, issue.Fields.Status.Name) {
 			return false
@@ -47,6 +47,21 @@ func matchCondition(event Event, issue *jira.Issue, pr *github.PullRequest, cond
 	if cond.Merged != nil {
 		merged := !pr.GetMergedAt().IsZero()
 		if merged != *cond.Merged {
+			return false
+		}
+	}
+	if cond.HasFixVersion != nil {
+		if fixVersion == "" {
+			return false
+		}
+		hasFixVersion := false
+		for _, v := range issue.Fields.FixVersions {
+			if v.Name == fixVersion {
+				hasFixVersion = true
+				break
+			}
+		}
+		if hasFixVersion != *cond.HasFixVersion {
 			return false
 		}
 	}
@@ -194,15 +209,9 @@ func (c *Jira) setFixVersion(ctx context.Context, issue *jira.Issue, fixVersion 
 	return nil
 }
 
-func (c *Jira) applyRule(ctx context.Context, jiraConfig configuration.Jira, branchConfig configuration.Branch, issue *jira.Issue, rule configuration.JiraRule, pr *github.PullRequest) error {
-	if rule.SetFixVersion && branchConfig.Version != "" {
-		org := pr.GetBase().GetRepo().GetOwner().GetLogin()
-		repo := pr.GetBase().GetRepo().GetName()
-		fixVersion, err := c.tagInformer.NextVersion(org, repo, branchConfig.Version)
-		if err != nil {
-			return fmt.Errorf("failed to get next version for %s/%s:%s: %w", org, repo, branchConfig.Name, err)
-		}
-		err = c.setFixVersion(ctx, issue, jiraConfig.FixVersionPrefix+fixVersion)
+func (c *Jira) applyRule(ctx context.Context, issue *jira.Issue, pr *github.PullRequest, fixVersion string, rule configuration.JiraRule) error {
+	if rule.SetFixVersion && fixVersion != "" {
+		err := c.setFixVersion(ctx, issue, fixVersion)
 		if err != nil {
 			return err
 		}
@@ -293,6 +302,15 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig conf
 		return err
 	}
 
+	fixVersion := ""
+	if branchConfig.Version != "" {
+		bareFixVersion, err := c.tagInformer.NextVersion(owner, repo, branchConfig.Version)
+		if err != nil {
+			return fmt.Errorf("failed to get next version for %s/%s:%s: %w", owner, repo, branchConfig.Name, err)
+		}
+		fixVersion = jiraConfig.FixVersionPrefix + bareFixVersion
+	}
+
 	rules := jiraConfig.Rules
 	if len(rules) == 0 {
 		rules = jiraConfig.Transitions
@@ -303,8 +321,8 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig conf
 		}
 	}
 	for _, rule := range rules {
-		if matchCondition(event, issue, pr, rule.When) {
-			err = c.applyRule(ctx, jiraConfig, branchConfig, issue, rule, pr)
+		if matchCondition(event, issue, pr, fixVersion, rule.When) {
+			err = c.applyRule(ctx, issue, pr, fixVersion, rule)
 			if err != nil {
 				klog.V(2).Infof("checking pull request %s/%s#%d: %v", owner, repo, pr.GetNumber(), err)
 			}

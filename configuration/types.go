@@ -7,9 +7,10 @@ import (
 )
 
 type JiraCondition struct {
-	Status []string `yaml:"status"`
-	Merged *bool    `json:"merged"`
-	Event  []string `json:"event"`
+	Status        []string `json:"status"`
+	Merged        *bool    `json:"merged"`
+	HasFixVersion *bool    `json:"hasFixVersion"`
+	Event         []string `json:"event"`
 }
 
 type JiraRule struct {
