@@ -14,22 +14,19 @@ type JiraCondition struct {
 }
 
 type JiraRule struct {
-	To            string        `json:"to"`
+	TransitionTo  string        `json:"transition_to"`
 	SetFixVersion bool          `json:"setFixVersion"`
 	When          JiraCondition `json:"when"`
 	Comment       string        `json:"comment"`
 
-	// DEPRECATED: Use When.Status instead.
-	From []string `json:"from"`
+	// DEPRECATED: use TransitionTo instead
+	To string `json:"to"`
 }
 
 type Jira struct {
 	Key              string     `json:"key"`
 	FixVersionPrefix string     `json:"fixVersionPrefix"`
 	Rules            []JiraRule `json:"rules"`
-
-	// DEPRECATED: Use Rules instead.
-	Transitions []JiraRule `json:"transitions"`
 }
 
 type BranchReference struct {

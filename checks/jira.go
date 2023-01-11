@@ -312,12 +312,9 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig conf
 	}
 
 	rules := jiraConfig.Rules
-	if len(rules) == 0 {
-		rules = jiraConfig.Transitions
-	}
 	for i := range rules {
-		if rules[i].When.Status == nil {
-			rules[i].When.Status = rules[i].From
+		if rules[i].TransitionTo == "" {
+			rules[i].TransitionTo = rules[i].To
 		}
 	}
 	for _, rule := range rules {
