@@ -6,27 +6,36 @@ repositories:
   jira:
     key: PROJQUAY
     fixVersionPrefix: quay-v
-    transitions:
-    - from:
-      - New
-      - Planning
-      - To Do
-      to: In Progress
+    rules:
+    - to: In Progress
       when:
+        status:
+        - New
+        - Planning
+        - To Do
         merged: false
         event:
         - opened
         - recheck
-    - from:
-      - New
-      - Planning
-      - To Do
-      - In Progress
-      - Review
-      to: Testing
+    - to: Testing
       setFixVersion: true
       when:
+        status:
+        - New
+        - Planning
+        - To Do
+        - In Progress
+        - Review
         merged: true
+        event:
+        - closed
+        - recheck
+      comment: |
+        Pull request [{{.PullRequest.Base.Repo.FullName}}#{{.PullRequest.Number}}|{{.PullRequest.HTMLURL}}] is merged.
+    - setFixVersion: true
+      when:
+        merged: true
+        hasFixVersion: false
         event:
         - closed
         - recheck
