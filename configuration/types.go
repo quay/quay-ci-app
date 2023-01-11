@@ -9,20 +9,20 @@ import (
 type JiraCondition struct {
 	Status        []string `json:"status"`
 	Merged        *bool    `json:"merged"`
-	HasFixVersion *bool    `json:"hasFixVersion"`
+	HasFixVersion *bool    `json:"has_fix_version"`
 	Event         []string `json:"event"`
 }
 
 type JiraRule struct {
 	TransitionTo  string        `json:"transition_to"`
-	SetFixVersion bool          `json:"setFixVersion"`
+	SetFixVersion bool          `json:"set_fix_version"`
 	When          JiraCondition `json:"when"`
 	Comment       string        `json:"comment"`
 }
 
 type Jira struct {
 	Key              string     `json:"key"`
-	FixVersionPrefix string     `json:"fixVersionPrefix"`
+	FixVersionPrefix string     `json:"fix_version_prefix"`
 	Rules            []JiraRule `json:"rules"`
 }
 
@@ -39,7 +39,7 @@ func (br BranchReference) String() string {
 type Branch struct {
 	Name     string          `json:"name"`
 	Version  string          `json:"version"`
-	SyncFrom BranchReference `json:"syncFrom"`
+	SyncFrom BranchReference `json:"sync_from"`
 }
 
 type Repository struct {
