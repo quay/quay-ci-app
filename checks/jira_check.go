@@ -38,7 +38,12 @@ func contains(list []string, str string) bool {
 	return false
 }
 
-func matchCondition(event Event, issue *jira.Issue, pr *github.PullRequest, cond configuration.JiraTransitionCondition) bool {
+func matchCondition(event Event, issue *jira.Issue, pr *github.PullRequest, cond configuration.JiraCondition) bool {
+	if len(cond.Status) > 0 {
+		if !contains(cond.Status, issue.Fields.Status.Name) {
+			return false
+		}
+	}
 	if cond.Merged != nil {
 		merged := !pr.GetMergedAt().IsZero()
 		if merged != *cond.Merged {
@@ -189,8 +194,8 @@ func (c *Jira) setFixVersion(ctx context.Context, issue *jira.Issue, fixVersion 
 	return nil
 }
 
-func (c *Jira) applyTransition(ctx context.Context, jiraConfig configuration.Jira, branchConfig configuration.Branch, issue *jira.Issue, tr configuration.JiraTransition, pr *github.PullRequest) error {
-	if tr.SetFixVersion && branchConfig.Version != "" {
+func (c *Jira) applyRule(ctx context.Context, jiraConfig configuration.Jira, branchConfig configuration.Branch, issue *jira.Issue, rule configuration.JiraRule, pr *github.PullRequest) error {
+	if rule.SetFixVersion && branchConfig.Version != "" {
 		org := pr.GetBase().GetRepo().GetOwner().GetLogin()
 		repo := pr.GetBase().GetRepo().GetName()
 		fixVersion, err := c.tagInformer.NextVersion(org, repo, branchConfig.Version)
@@ -203,8 +208,8 @@ func (c *Jira) applyTransition(ctx context.Context, jiraConfig configuration.Jir
 		}
 	}
 
-	if tr.Comment != "" {
-		commentTemplate, err := template.New("comment").Parse(tr.Comment)
+	if rule.Comment != "" {
+		commentTemplate, err := template.New("comment").Parse(rule.Comment)
 		if err != nil {
 			return fmt.Errorf("failed to parse comment template: %w", err)
 		}
@@ -225,9 +230,9 @@ func (c *Jira) applyTransition(ctx context.Context, jiraConfig configuration.Jir
 		}
 	}
 
-	err := c.transitionTo(ctx, issue, tr.To)
+	err := c.transitionTo(ctx, issue, rule.To)
 	if err != nil {
-		return fmt.Errorf("failed to transition Jira issue %s to %s: %v", issue.Key, tr.To, err)
+		return fmt.Errorf("failed to transition Jira issue %s to %s: %v", issue.Key, rule.To, err)
 	}
 
 	return nil
@@ -288,9 +293,18 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig conf
 		return err
 	}
 
-	for _, tr := range jiraConfig.Transitions {
-		if contains(tr.From, issue.Fields.Status.Name) && matchCondition(event, issue, pr, tr.When) {
-			err = c.applyTransition(ctx, jiraConfig, branchConfig, issue, tr, pr)
+	rules := jiraConfig.Rules
+	if len(rules) == 0 {
+		rules = jiraConfig.Transitions
+	}
+	for i := range rules {
+		if rules[i].When.Status == nil {
+			rules[i].When.Status = rules[i].From
+		}
+	}
+	for _, rule := range rules {
+		if matchCondition(event, issue, pr, rule.When) {
+			err = c.applyRule(ctx, jiraConfig, branchConfig, issue, rule, pr)
 			if err != nil {
 				klog.V(2).Infof("checking pull request %s/%s#%d: %v", owner, repo, pr.GetNumber(), err)
 			}

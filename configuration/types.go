@@ -6,23 +6,29 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-type JiraTransitionCondition struct {
+type JiraCondition struct {
+	Status []string `yaml:"status"`
 	Merged *bool    `json:"merged"`
 	Event  []string `json:"event"`
 }
 
-type JiraTransition struct {
-	From          []string                `json:"from"`
-	To            string                  `json:"to"`
-	SetFixVersion bool                    `json:"setFixVersion"`
-	When          JiraTransitionCondition `json:"when"`
-	Comment       string                  `json:"comment"`
+type JiraRule struct {
+	To            string        `json:"to"`
+	SetFixVersion bool          `json:"setFixVersion"`
+	When          JiraCondition `json:"when"`
+	Comment       string        `json:"comment"`
+
+	// DEPRECATED: Use When.Status instead.
+	From []string `json:"from"`
 }
 
 type Jira struct {
-	Key              string           `json:"key"`
-	FixVersionPrefix string           `json:"fixVersionPrefix"`
-	Transitions      []JiraTransition `json:"transitions"`
+	Key              string     `json:"key"`
+	FixVersionPrefix string     `json:"fixVersionPrefix"`
+	Rules            []JiraRule `json:"rules"`
+
+	// DEPRECATED: Use Rules instead.
+	Transitions []JiraRule `json:"transitions"`
 }
 
 type BranchReference struct {
