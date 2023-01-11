@@ -18,9 +18,6 @@ type JiraRule struct {
 	SetFixVersion bool          `json:"setFixVersion"`
 	When          JiraCondition `json:"when"`
 	Comment       string        `json:"comment"`
-
-	// DEPRECATED: use TransitionTo instead
-	To string `json:"to"`
 }
 
 type Jira struct {

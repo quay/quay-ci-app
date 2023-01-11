@@ -239,9 +239,9 @@ func (c *Jira) applyRule(ctx context.Context, issue *jira.Issue, pr *github.Pull
 		}
 	}
 
-	err := c.transitionTo(ctx, issue, rule.To)
+	err := c.transitionTo(ctx, issue, rule.TransitionTo)
 	if err != nil {
-		return fmt.Errorf("failed to transition Jira issue %s to %s: %v", issue.Key, rule.To, err)
+		return fmt.Errorf("failed to transition Jira issue %s to %s: %v", issue.Key, rule.TransitionTo, err)
 	}
 
 	return nil
@@ -311,13 +311,7 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig conf
 		fixVersion = jiraConfig.FixVersionPrefix + bareFixVersion
 	}
 
-	rules := jiraConfig.Rules
-	for i := range rules {
-		if rules[i].TransitionTo == "" {
-			rules[i].TransitionTo = rules[i].To
-		}
-	}
-	for _, rule := range rules {
+	for _, rule := range jiraConfig.Rules {
 		if matchCondition(event, issue, pr, fixVersion, rule.When) {
 			err = c.applyRule(ctx, issue, pr, fixVersion, rule)
 			if err != nil {
