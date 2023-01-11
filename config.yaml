@@ -7,7 +7,7 @@ repositories:
     key: PROJQUAY
     fixVersionPrefix: quay-v
     rules:
-    - to: In Progress
+    - transition_to: In Progress
       when:
         status:
         - New
@@ -17,7 +17,7 @@ repositories:
         event:
         - opened
         - recheck
-    - to: Testing
+    - transition_to: Testing
       setFixVersion: true
       when:
         status:
