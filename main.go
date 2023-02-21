@@ -140,6 +140,7 @@ func (si *StatusInformer) UpdateBranchSyncStatus(branch, status, message string)
 
 type Reactor interface {
 	HandleBranchPush(ctx context.Context, org, repo string, branch string) error
+	HandleTagPush(ctx context.Context, org, repo string, tag string) error
 	HandleCheckSuiteRerequest(ctx context.Context, org, repo string, checkSuite *github.CheckSuite) error
 	HandleIssueCommentCreate(ctx context.Context, org, repo string, issue *github.Issue, comment *github.IssueComment) error
 	HandlePullRequestClose(ctx context.Context, org, repo string, pr *github.PullRequest) error
@@ -148,10 +149,11 @@ type Reactor interface {
 }
 
 type reactor struct {
-	client         *github.Client
-	cfg            *configuration.Configuration
-	jiraCheck      *checks.Jira
-	statusInformer *StatusInformer
+	client             *github.Client
+	cfg                *configuration.Configuration
+	jiraCheck          *checks.Jira
+	statusInformer     *StatusInformer
+	invalidateTagCache func()
 }
 
 func (r reactor) sync(ctx context.Context, dest, src configuration.BranchReference) error {
@@ -206,6 +208,11 @@ func (r reactor) HandleBranchPush(ctx context.Context, org, repo string, branch 
 		}
 	}
 	return errors.NewAggregate(errs)
+}
+
+func (r reactor) HandleTagPush(ctx context.Context, org, repo string, branch string) error {
+	r.invalidateTagCache()
+	return nil
 }
 
 func (r reactor) HandleCheckSuiteRerequest(ctx context.Context, org, repo string, checkSuite *github.CheckSuite) error {
@@ -317,6 +324,10 @@ func (eh *EventHandler) HandleEvent(eventType string, body string) error {
 			branch := strings.TrimPrefix(ref, "refs/heads/")
 			return eh.reactor.HandleBranchPush(context.Background(), pushEvent.Repo.Owner.GetLogin(), pushEvent.Repo.GetName(), branch)
 		}
+		if strings.HasPrefix(ref, "refs/tags/") {
+			tag := strings.TrimPrefix(ref, "refs/tags/")
+			return eh.reactor.HandleTagPush(context.Background(), pushEvent.Repo.Owner.GetLogin(), pushEvent.Repo.GetName(), tag)
+		}
 	}
 	return nil
 }
@@ -376,10 +387,11 @@ func main() {
 	tagInformer := taginformer.New(client)
 	statusInformer := &StatusInformer{}
 	r := &reactor{
-		client:         client,
-		cfg:            cfg,
-		jiraCheck:      checks.NewJira(client, appClient, jiraClient, tagInformer),
-		statusInformer: statusInformer,
+		client:             client,
+		cfg:                cfg,
+		jiraCheck:          checks.NewJira(client, appClient, jiraClient, tagInformer),
+		statusInformer:     statusInformer,
+		invalidateTagCache: tagInformer.InvalidateCache,
 	}
 	eh := &EventHandler{reactor: r}
 

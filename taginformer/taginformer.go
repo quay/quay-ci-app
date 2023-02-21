@@ -68,6 +68,13 @@ func (ti *TagInformer) hasSynced(org, repo string) bool {
 	return ti.synced[fmt.Sprintf("%s/%s", org, repo)]
 }
 
+func (ti *TagInformer) InvalidateCache() {
+	ti.mutex.Lock()
+	defer ti.mutex.Unlock()
+	ti.synced = nil
+	ti.tags = nil
+}
+
 func (ti *TagInformer) addRefs(org, repo string, tags []*github.Reference) {
 	ti.mutex.Lock()
 	defer ti.mutex.Unlock()

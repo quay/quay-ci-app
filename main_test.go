@@ -19,6 +19,11 @@ func (r *dummyReactor) HandleBranchPush(ctx context.Context, org, repo string, b
 	return nil
 }
 
+func (r *dummyReactor) HandleTagPush(ctx context.Context, org, repo string, tag string) error {
+	r.events = append(r.events, fmt.Sprintf("tag_push:%s/%s:%s", org, repo, tag))
+	return nil
+}
+
 func (r *dummyReactor) HandleCheckSuiteRerequest(ctx context.Context, org, repo string, suite *github.CheckSuite) error {
 	var prs []string
 	for _, pr := range suite.PullRequests {
@@ -60,6 +65,22 @@ func TestPushEvent(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if !reflect.DeepEqual(r.events, []string{"branch_push:quay/quay:master"}) {
+		t.Errorf("unexpected events: %v", r.events)
+	}
+}
+
+func TestPushTagEvent(t *testing.T) {
+	const pushEvent = `{"ref":"refs/tags/v3.8.0","before":"5a1fa17a799800f09a9bf447a5c83e3b01bd3ef1","after":"2219d5aed22f28546df28fac4a4c7d0cc783f9d6","repository":{"name":"quay","full_name":"quay/quay","private":false,"owner":{"name":"quay","login":"quay"}}}`
+
+	r := &dummyReactor{}
+	eh := &EventHandler{
+		reactor: r,
+	}
+	err := eh.HandleEvent("push", pushEvent)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+	if !reflect.DeepEqual(r.events, []string{"tag_push:quay/quay:v3.8.0"}) {
 		t.Errorf("unexpected events: %v", r.events)
 	}
 }
