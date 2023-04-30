@@ -22,6 +22,7 @@ const (
 	EventClosed  Event = "closed"
 	EventEdited  Event = "edited"
 	EventOpened  Event = "opened"
+	EventSync    Event = "sync"
 	EventRecheck Event = "recheck"
 )
 

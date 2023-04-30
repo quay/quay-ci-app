@@ -146,6 +146,7 @@ type Reactor interface {
 	HandlePullRequestClose(ctx context.Context, org, repo string, pr *github.PullRequest) error
 	HandlePullRequestCreate(ctx context.Context, org, repo string, pr *github.PullRequest) error
 	HandlePullRequestEdit(ctx context.Context, org, repo string, pr *github.PullRequest) error
+	HandlePullRequestSynchronize(ctx context.Context, org, repo string, pr *github.PullRequest) error
 }
 
 type reactor struct {
@@ -270,6 +271,10 @@ func (r reactor) HandlePullRequestEdit(ctx context.Context, org, repo string, pr
 	return r.jiraCheck.Run(checks.EventEdited, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr)
 }
 
+func (r reactor) HandlePullRequestSynchronize(ctx context.Context, org, repo string, pr *github.PullRequest) error {
+	return r.jiraCheck.Run(checks.EventSync, r.cfg.Jira(org, repo), r.cfg.Branch(org, repo, pr.GetBase().GetRef()), pr)
+}
+
 type EventHandler struct {
 	reactor Reactor
 }
@@ -311,6 +316,8 @@ func (eh *EventHandler) HandleEvent(eventType string, body string) error {
 			return eh.reactor.HandlePullRequestEdit(context.Background(), prEvent.Repo.Owner.GetLogin(), prEvent.Repo.GetName(), prEvent.PullRequest)
 		case "closed":
 			return eh.reactor.HandlePullRequestClose(context.Background(), prEvent.Repo.Owner.GetLogin(), prEvent.Repo.GetName(), prEvent.PullRequest)
+		case "synchronize":
+			return eh.reactor.HandlePullRequestSynchronize(context.Background(), prEvent.Repo.Owner.GetLogin(), prEvent.Repo.GetName(), prEvent.PullRequest)
 		}
 	case "push":
 		var pushEvent github.PushEvent

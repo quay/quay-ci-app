@@ -53,6 +53,11 @@ func (r *dummyReactor) HandlePullRequestEdit(ctx context.Context, org, repo stri
 	return nil
 }
 
+func (r *dummyReactor) HandlePullRequestSynchronize(ctx context.Context, org, repo string, pr *github.PullRequest) error {
+	r.events = append(r.events, fmt.Sprintf("pull_request_synchronize:%s/%s:%d:[%s]", org, repo, pr.GetNumber(), pr.GetTitle()))
+	return nil
+}
+
 func TestPushEvent(t *testing.T) {
 	const pushEvent = `{"ref":"refs/heads/master","before":"5a1fa17a799800f09a9bf447a5c83e3b01bd3ef1","after":"2219d5aed22f28546df28fac4a4c7d0cc783f9d6","repository":{"name":"quay","full_name":"quay/quay","private":false,"owner":{"name":"quay","login":"quay"}}}`
 
@@ -161,6 +166,22 @@ func TestPullRequestEdit(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 	if !reflect.DeepEqual(r.events, []string{"pull_request_edit:quay/quay:1:[chore: Test PR (PROJQUAY-1234)]"}) {
+		t.Errorf("unexpected events: %v", r.events)
+	}
+}
+
+func TestPullRequestSynchronize(t *testing.T) {
+	const prEvent = `{"action":"synchronize","pull_request":{"number":1,"title":"chore: Test PR (PROJQUAY-1234)","state":"open"},"repository":{"name":"quay","full_name":"quay/quay","private":false,"owner":{"name":"quay","login":"quay"}}}`
+
+	r := &dummyReactor{}
+	eh := &EventHandler{
+		reactor: r,
+	}
+	err := eh.HandleEvent("pull_request", prEvent)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+	if !reflect.DeepEqual(r.events, []string{"pull_request_synchronize:quay/quay:1:[chore: Test PR (PROJQUAY-1234)]"}) {
 		t.Errorf("unexpected events: %v", r.events)
 	}
 }
