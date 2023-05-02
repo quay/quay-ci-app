@@ -44,6 +44,9 @@ repositories:
   branches:
   - name: master
     version: "3.9"
+  - name: redhat-3.10
+    sync_from:
+      branch: master
   - name: redhat-3.9
     sync_from:
       branch: master
@@ -53,12 +56,6 @@ repositories:
     version: "3.7"
   - name: redhat-3.6
     version: "3.6"
-- owner: quay
-  repo: quay-ui
-  branches:
-  - name: redhat-3.9
-    sync_from:
-      branch: main
 - owner: quay
   repo: quay-operator
   branches:
