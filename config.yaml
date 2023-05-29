@@ -43,13 +43,12 @@ repositories:
         Pull request [{{.PullRequest.Base.Repo.FullName}}#{{.PullRequest.Number}}|{{.PullRequest.HTMLURL}}] is merged.
   branches:
   - name: master
-    version: "3.9"
+    version: "3.10"
   - name: redhat-3.10
     sync_from:
       branch: master
   - name: redhat-3.9
-    sync_from:
-      branch: master
+    version: "3.9"
   - name: redhat-3.8
     version: "3.8"
   - name: redhat-3.7
@@ -59,37 +58,37 @@ repositories:
 - owner: quay
   repo: quay-operator
   branches:
-  - name: redhat-3.9
+  - name: redhat-3.10
     sync_from:
       branch: master
 - owner: quay
   repo: config-tool
   branches:
-  - name: redhat-3.9
+  - name: redhat-3.10
     sync_from:
       branch: master
 - owner: quay
   repo: quay-bridge-operator
   branches:
-  - name: redhat-3.9
+  - name: redhat-3.10
     sync_from:
       branch: master
 - owner: quay
   repo: quay-builder
   branches:
-  - name: redhat-3.9
+  - name: redhat-3.10
     sync_from:
       branch: master
 - owner: quay
   repo: quay-builder-qemu
   branches:
-  - name: redhat-3.9
+  - name: redhat-3.10
     sync_from:
       branch: main
 - owner: quay
   repo: container-security-operator
   branches:
-  - name: redhat-3.9
+  - name: redhat-3.10
     sync_from:
       branch: master
 - owner: quay
