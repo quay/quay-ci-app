@@ -6,6 +6,11 @@ repositories:
   jira:
     key: PROJQUAY
     fix_version_prefix: quay-v
+    valid_issue_types:
+    - Bug
+    - Spike
+    - Story
+    - Task
     rules:
     - transition_to: In Progress
       when:
