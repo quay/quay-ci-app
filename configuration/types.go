@@ -23,6 +23,7 @@ type JiraRule struct {
 type Jira struct {
 	Key              string     `json:"key"`
 	FixVersionPrefix string     `json:"fix_version_prefix"`
+	ValidIssueTypes  []string   `json:"valid_issue_types"`
 	Rules            []JiraRule `json:"rules"`
 }
 

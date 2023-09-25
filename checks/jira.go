@@ -295,6 +295,16 @@ func (c *Jira) Run(event Event, jiraConfig configuration.Jira, branchConfig conf
 		})
 	}
 
+	if len(jiraConfig.ValidIssueTypes) > 0 {
+		issueType := issue.Fields.Type.Name
+		if !contains(jiraConfig.ValidIssueTypes, issueType) {
+			return c.reportTitleResult(ctx, owner, repo, headSHA, pr.GetNumber(), "failure", &github.CheckRunOutput{
+				Title:   github.String("Jira issue " + key + " has an invalid issue type, expected one of " + strings.Join(jiraConfig.ValidIssueTypes, ", ")),
+				Summary: github.String("The Jira issue `" + key + "` has an invalid issue type `" + issueType + "`, expected one of " + strings.Join(jiraConfig.ValidIssueTypes, ", ") + ".\n"),
+			})
+		}
+	}
+
 	err = c.reportTitleResult(ctx, owner, repo, headSHA, pr.GetNumber(), "success", &github.CheckRunOutput{
 		Title:   github.String("Pull request title has a valid Jira issue"),
 		Summary: github.String("The pull request title is valid and has a Jira issue.\n"),
