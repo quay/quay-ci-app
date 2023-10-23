@@ -69,12 +69,6 @@ repositories:
     sync_from:
       branch: master
 - owner: quay
-  repo: config-tool
-  branches:
-  - name: redhat-3.11
-    sync_from:
-      branch: master
-- owner: quay
   repo: quay-bridge-operator
   branches:
   - name: redhat-3.11
